@@ -2,9 +2,19 @@
 
 	$es = new elasticSearch('http://127.0.0.1');
 	$esx = $es->index('meep', 'rawr');
-	$esd = $esx->index('meep'.time());
+	$esd = $esx->document('meep'.time());
 	$esd->setData($_SERVER);
-	print_r($esd->index());
+	print_r($esd->indexDoc());
+	
+	//lets get a docment
+	$find = $esx->document('meep1353904493')->getDoc();
+	print_r($find->data);
+	
+	$find->data[] = rand();
+	$find->indexDoc();
+	
+	print_r($find->delDoc());
+	
 
 	class elasticSearch	{
 		/*
@@ -25,10 +35,13 @@
 		}
 		
 		function makePath(array $opts)	{
-			foreach($opts as $dex=>$dat)	{
-				$query .= $dex.'='.$dat.'&';
+			if(count($opts) > 0)	{
+				foreach($opts as $dex=>$dat)	{
+					$query .= $dex.'='.$dat.'&';
+				}
+				return '?'.substr($query, -1);
 			}
-			return '?'.substr($query, -1);
+			return "";
 		}
 		
 		function stream($path, $method='GET', $payload)	{
@@ -40,7 +53,7 @@
 	class esIndex	{
 		function __construct($conn, $index, $type="")	{
 			$this->conn = $conn;
-			$this->index = $this->setIndex($index);
+			$this->setIndex($index); //set $this->index
 			$this->setType($type);
 			$this->opts = array();
 		}
@@ -100,7 +113,7 @@
 		}
 		
 		function stream($input, $method, $payload=null)	{
-			return $this->conn->stream($this->index->getIndexType().$input.$this->conn->makePath($this->opts), $method, $payload);
+			return $this->conn->stream($this->getIndexType().$input.$this->conn->makePath($this->opts), $method, $payload);
 		}
 		
 		function mGet($docs, $fields=null)	{
@@ -120,6 +133,8 @@
 	}
 	
 	class esIndexDoc {
+		public $data = "";
+		
 		function __construct($index, $id, $data=array())	{
 			$this->index = $index;
 			$this->id = $id;
@@ -128,11 +143,11 @@
 		}
 		
 		function indexDoc()	{ //index the document
-			return $this->index->stream($this->id, 'POST', $this->data);
+			return $this->index->stream($this->id, 'POST', $this->encodeData($this->data));
 		}
 		
 		function delDoc()	{
-			return $this->index->stream($this->id, 'GET', null);
+			return $this->decodeData($this->index->stream($this->id, 'DELETE', null));
 		}
 		
 		function getDoc($type=null)	{
@@ -144,14 +159,19 @@
 			if($type != null)	{ //replace type
 				$this->setType($typeBK);
 			}
-			return $result;
+			//var_dump($result);
+			$this->data = $this->decodeData($result);
+			return $this;
 		}
 		
-		function updateDoc($update, $retry=0)	{
+		function updateDoc($update=null, $retry=0)	{
+			if ($update != null)	{
+				$this->setData($update);
+			}
 			if($retry > 0)	{
 				$this->index->setOpt('retry_on_confict', $retry);
 			}
-			return $this->index->stream($this->id.'/_update', 'POST', $update);
+			return $this->index->stream($this->id.'/_update', 'POST', $this->encodeData($this->data));
 		}
 		
 		function setOptions($opts)	{
@@ -163,8 +183,18 @@
 		}
 		
 		function setData($data)	{
-			$this->data = json_encode($data);
+			$this->data = $data;
 			return $this;
+		}
+		
+		function encodeData($data=null)	{
+			$data = ($data == null) ? $this->data : $data;
+			return json_encode($data);
+		}
+		
+		function decodeData($data=null)	{
+			$data = ($data == null) ? $this->data : $data;
+			return json_decode($data, true);
 		}
 		
 		function setVersion($version)	{
