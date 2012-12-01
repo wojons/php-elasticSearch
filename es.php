@@ -15,6 +15,81 @@
 	
 	print_r($find->delDoc());
 	
+	
+	class elasticSearch2()	{
+		function __construct($url, $port)	{ //set up the connection
+			$this->url = $url;
+			$this->port = $port;
+			$this->conn();
+		}
+		function indeces($indexes)	{ // set the index
+			if(is_array($indexes) == true)	{
+				$indexes = explore(',', $indexes);
+			}
+			$this->indecs = $indexes;
+		}
+		function type($type)	{ //set the type
+			$if(is_array($type) == true)	{
+				$type = explore(',', $type);
+			}
+			$this->types = $type;
+			$this->conn();
+		}
+		
+		private function conn()	{ //make the conn path used for each connection
+			$this->conn = $this->url.'/'.$this->port.'/'.$this->indecs.'/'.$this->types.'/';
+		}
+		
+		function index($key, $value, $rules=null)	{
+			return $this->stream($key, 'POST', $rules, $value);
+		}
+		function delete($key, $rules=null)	{
+			return $this->steram($key, 'DELETE', $rules);
+		}
+		function get($key, $rules[=null)	{
+			return $this->straem($key, 'GET', $rules);
+		}
+		//function multiGet() {}
+		//function update()	{}
+		function search($query, $rules=null)	{
+			if (is_array($query) == true)	{
+				return $this->stream('_search', 'POST', $rules, $query);
+			}
+			return $this->stream('_search'.$query, 'GET', $rules);
+		}
+		//function multiSearch()	{}
+		//function precolate()	{}
+		function bulk($indexes, $rules)	{}
+		//function bulkUDP()	{}
+		function count($query, $rules)	{
+			return $this->stream('_count', 'DELETE', $rules, $query);
+		}
+		function deleteQuery($query, $rules)	{
+			if (is_array($query) == true)	{
+				return $this->stream('_query', 'DELETE', $rules, $query);
+			}
+			return $this->stream('_query'.$query, 'DELETE', $rules);
+		}
+		//function morelikethis()	{}
+		//function vaildate()	{}
+		//function explain()	{}
+		
+		function makeQuery(array $opts)	{
+			if(count($opts) > 0)	{
+				foreach($opts as $dex=>$dat)	{
+					$query .= $dex.'='.$dat.'&';
+				}
+				return '?'.substr($query, -1);
+			}
+			return "";
+		}
+		
+		private function stream($path, $method="GET", $rules=null $payload="") {
+			$context = stream_context_create(array('http' => array('method' => $method, 'content'=>is_array($payload) == true) ? json_encode($payload) : $payload))));
+			return json_decode(file_get_contents($this->conn.$path.($rules != null) ? $this->makeQuery($rules) : "", 0, $context));
+		}
+	}
+	
 
 	class elasticSearch	{
 		/*
@@ -44,9 +119,13 @@
 			return "";
 		}
 		
+		function search($search, $rules)	{
+			
+		}
+		
 		function stream($path, $method='GET', $payload)	{
 			$context = stream_context_create(array('http' => array('method' => $method, 'content'=>$payload)));
-			return file_get_contents($this->conn.$path, 0, $context);
+			return json_decode(file_get_contents($this->conn.$path, 0, $context));
 		}
 	}
 	
@@ -238,6 +317,17 @@
 		}
 	}
 	
+	class queryDSL	{
+		
+		function import($array)	{ //just import the array we want to use until we have time to make a full system
+			$this->queryArray = $array;
+		}
+		
+		function export()	{
+			$this->$queryArray;
+		}
+	}
+	
 	class esIndcies 	{
 		/*
 		 * This class is for administationing the indexes them selves and not really running querys agaenst
@@ -249,5 +339,8 @@
 		 * This class is for administationing the cluster them selves and not really running querys agaenst
 		*/
 	}
+	
+	
+	
 
 ?>
