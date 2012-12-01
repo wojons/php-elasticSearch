@@ -1,6 +1,19 @@
 <?php
 
-	$es = new elasticSearch('http://127.0.0.1');
+
+	$es = new elasticSearch2('http://127.0.0.1');
+	$es->indeces('meep')->type('rawr');
+	//for($x=0; $x<1000; $x++)	{
+	$doc = $es->index('rand_'.rand(), $_SERVER);
+	//}
+	//print_r($results);
+	print_r($es->get($doc['_id']));
+	if(rand(0, 1) == 1)	{ //only delete half of them
+		print_r($es->delete($doc['_id']));
+	}
+	print_r($es->search(''));
+
+	/*$es = new elasticSearch('http://127.0.0.1');
 	$esx = $es->index('meep', 'rawr');
 	$esd = $esx->document('meep'.time());
 	$esd->setData($_SERVER);
@@ -13,11 +26,11 @@
 	$find->data[] = rand();
 	$find->indexDoc();
 	
-	print_r($find->delDoc());
+	print_r($find->delDoc());*/
 	
 	
-	class elasticSearch2()	{
-		function __construct($url, $port)	{ //set up the connection
+	class elasticSearch2	{
+		function __construct($url, $port=9200)	{ //set up the connection
 			$this->url = $url;
 			$this->port = $port;
 			$this->conn();
@@ -27,27 +40,29 @@
 				$indexes = explore(',', $indexes);
 			}
 			$this->indecs = $indexes;
+			return $this;
 		}
 		function type($type)	{ //set the type
-			$if(is_array($type) == true)	{
+			if(is_array($type) == true)	{
 				$type = explore(',', $type);
 			}
 			$this->types = $type;
 			$this->conn();
+			return $this;
 		}
 		
 		private function conn()	{ //make the conn path used for each connection
-			$this->conn = $this->url.'/'.$this->port.'/'.$this->indecs.'/'.$this->types.'/';
+			$this->conn = $this->url.':'.$this->port.'/'.$this->indecs.'/'.$this->types.'/';
 		}
 		
 		function index($key, $value, $rules=null)	{
 			return $this->stream($key, 'POST', $rules, $value);
 		}
 		function delete($key, $rules=null)	{
-			return $this->steram($key, 'DELETE', $rules);
+			return $this->stream($key, 'DELETE', $rules);
 		}
-		function get($key, $rules[=null)	{
-			return $this->straem($key, 'GET', $rules);
+		function get($key, $rules=null)	{
+			return $this->stream($key, 'GET', $rules);
 		}
 		//function multiGet() {}
 		//function update()	{}
@@ -74,7 +89,7 @@
 		//function vaildate()	{}
 		//function explain()	{}
 		
-		function makeQuery(array $opts)	{
+		function makeQuery($opts)	{
 			if(count($opts) > 0)	{
 				foreach($opts as $dex=>$dat)	{
 					$query .= $dex.'='.$dat.'&';
@@ -84,9 +99,9 @@
 			return "";
 		}
 		
-		private function stream($path, $method="GET", $rules=null $payload="") {
-			$context = stream_context_create(array('http' => array('method' => $method, 'content'=>is_array($payload) == true) ? json_encode($payload) : $payload))));
-			return json_decode(file_get_contents($this->conn.$path.($rules != null) ? $this->makeQuery($rules) : "", 0, $context));
+		private function stream($path, $method="GET", $rules=null, $payload="") {
+			$context = stream_context_create(array('http' => array('method' => $method, 'content'=>(is_array($payload) == true) ? json_encode($payload) : $payload)));
+			return json_decode(file_get_contents($this->conn.$path.(($rules != null) ? $this->makeQuery($rules) : ""), 0, $context), true);
 		}
 	}
 	
