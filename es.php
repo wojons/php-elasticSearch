@@ -1,61 +1,30 @@
 <?php
 
-
-	/*$es = new elasticSearchBasic('http://127.0.0.1');
-	$es->indeces('apache_access');
-	
-	if(isset($_GET['log_insert']) == true)	{
-		$platform_id = "1234";
-		$host = "alexis-VirtualBox";
-		$log_name = "apache_access";
-		$meta = json_decode($_POST['meta'], true);
-		foreach($meta['logs'] as $dat)	{
-			//$bucket = $platform_id.".".$host.".".$log_name;
-			$es->type($platform_id);
-			print $platform_id;
-			foreach(explode("\n",gzuncompress(base64_decode($_POST[$dat]))) as $dex2 => $dat2)	{
-				//$dat2 = json_decode($dat2, true);
-				//var_dump($dat2);
-				print_r($es->index($meta['log_time'].".".$dex2, $dat2));
-			}
-		}
-	}*/
-	
-	/*$es->type("1234");
-	//$es->index(rand(), $_SERVER);
-	//print_r($es->get('22573315.1'));
-	print_r($es->search("host:127.0.0.1"));
-	
-	/*$es = new elasticSearch('http://127.0.0.1');
-	$esx = $es->index('meep', 'rawr');
-	$esd = $esx->document('meep'.time());
-	$esd->setData($_SERVER);
-	print_r($esd->indexDoc());
-	
-	//lets get a docment
-	$find = $esx->document('meep1353904493')->getDoc();
-	print_r($find->data);
-	
-	$find->data[] = rand();
-	$find->indexDoc();
-	
-	print_r($find->delDoc());*/
-	
-	
-	class elasticSearchBasic	{
-		function __construct($url, $port=9200)	{ //set up the connection
+class elasticSearch	{
+		
+		public $metaStream = array();
+		
+		function __construct($url, $port=9200, $index=null, $type=null)	{ //set up the connection
 			$this->url = $url;
 			$this->port = $port;
 			$this->conn();
-		}
-		function indeces($indexes)	{ // set the index
-			if(is_array($indexes) == true)	{
-				$indexes = explore(',', $indexes);
+			if($index != null)	{ //set a few things up
+				$this->set_type($index);
+				if($type != null)	{
+					$this->set_type($type);
+				}
 			}
-			$this->indecs = $indexes;
+		}
+		function set_indices($indexs)	{ // set the index
+			if(is_array($indexes) == true)	{
+				$indexs = explore(',', $indexs);
+			}
+			
+			$this->indices = $indexs;
+			$this->conn();
 			return $this;
 		}
-		function type($type)	{ //set the type
+		function set_type($type)	{ //set the type
 			if(is_array($type) == true)	{
 				$type = explore(',', $type);
 			}
@@ -65,11 +34,15 @@
 		}
 		
 		private function conn()	{ //make the conn path used for each connection
-			$this->conn = $this->url.':'.$this->port.'/'.$this->indecs.'/'.$this->types.'/';
+			$this->conn = $this->url.':'.$this->port.'/'.$this->indices.'/'.$this->types.'/';
 		}
 		
 		function index($key, $value, $rules=null)	{
-			return $this->stream($key, 'PUT', $rules, $value);
+			if($key != null)	{
+				return $this->stream($key, 'PUT', $rules, $value);
+			} else {
+				return $this->stream('', 'POST', $rules, $value);
+			}
 		}
 		function delete($key, $rules=null)	{
 			return $this->stream($key, 'DELETE', $rules);
@@ -82,13 +55,43 @@
 		function search($query, $rules=null)	{
 			if (is_array($query) == true)	{
 				return $this->stream('_search', 'POST', $rules, $query);
+				//return $this->stream('_search', 'GET', $rules, $query);
 			}
 			$rules['q'] = $query;
 			return $this->stream('_search', 'GET', $rules);
 		}
+		
+		function searchResults($result)	{
+			return new elasticSearchResults($result);
+		}
+		
+		
 		//function multiSearch()	{}
 		//function precolate()	{}
-		function bulk($indexes, $rules)	{}
+		
+		function bulkIndex($data, $id=null, $index=null, $type=null)	{
+			$this->bulkItem('index', $data, $id, $index, $type);
+		}
+		
+		function bulkItem($action, $data=null, $id=null, $index=null, $type=null)	{
+			if($id != null) { $set['_id'] =  $id; } 
+			$set['index'] = ($index != null) ? $index : $this->indices;
+			$set['type'] = ($type != null) ? $type : $this->types;
+			$this->bulkItems[] = array($action => $set);
+			if($data != null)	{ $this->bulkItems[] = $data; }
+		}
+		
+		function bulkItem_count()	{
+			return count($this->bulkItems);
+		}
+		
+		function bulk($rules=null)	{
+			foreach($this->bulkItems as $dex => $dat)	{
+				$bulkData[$dex] = json_encode($dat);
+			}
+			$this->bulkItems = array();
+			return $this->stream('_bulk', 'POST', $rules, implode("\n", $bulkData)."\n");
+		}
 		//function bulkUDP()	{}
 		function count($query, $rules)	{
 			return $this->stream('_count', 'DELETE', $rules, $query);
@@ -108,269 +111,88 @@
 				foreach($opts as $dex=>$dat)	{
 					$query .= $dex.'='.$dat.'&';
 				}
-				return '?'.substr($query, -1);
+				return '?'.substr($query, 0, -1);
 			}
 			return "";
 		}
 		
 		private function stream($path, $method="GET", $rules=null, $payload="") {
-			//print_r(array('http' => array('method' => $method, 'content'=>(is_array($payload) == true) ? json_encode($payload) : $payload)));
-			$context = stream_context_create(array('http' => array('method' => $method, 'content'=>(is_array($payload) == true) ? json_encode($payload) : $payload)));
-			return json_decode(file_get_contents($this->conn.$path.(($rules != null) ? $this->makeQuery($rules) : ""), 0, $context), true);
-		}
-	}
-	
-
-	class elasticSearch	{
-		/*
-		 * Base class does not really hold any elastic search stuff but useful for creating network connections
-		*/
-		
-		function __construct($url, $port=9200)	{
-			$this->connect($url, $port);
+			$context = stream_context_create(array('http' => array('method' => $method, 'ignore_errors' => true, 'content'=>(is_array($payload) == true) ? json_encode($payload) : $payload)));
+			$stream = fopen($this->conn.$path.(($rules != null) ? $this->makeQuery($rules) : ""), 'r', false, $context);
+			$this->metaStream(stream_get_meta_data($stream)['wrapper_data']); //parse the meta data from the steam
+			return json_decode(stream_get_contents($stream), true); //send the normal return as normal
 		}
 		
-		function connect($url, $port=9200)	{
-			$this->conn = $url.':'.$port.'/';
-			return $this;
-		}
-		
-		function index($name, $type)	{
-			return new esIndex($this, $name, $type);
-		}
-		
-		function makePath(array $opts)	{
-			if(count($opts) > 0)	{
-				foreach($opts as $dex=>$dat)	{
-					$query .= $dex.'='.$dat.'&';
-				}
-				return '?'.substr($query, -1);
-			}
-			return "";
-		}
-		
-		function search($search, $rules)	{
+		private function metaStream($meta)	{
+			//first line has some info in it that not like the rest
+			$chop = explode(' ', $meta[0]);
+			$this->metaStream['protocol'] = $chop[0];
+			$this->metaStream['statusCode'] = $chop[1];
+			$this->metaStream['statusText'] = implode(' ', array_slice($chop, 2));
 			
+			unset($meta[0]); //remvove it since we took care of it
+			foreach($meta as $dat)	{ //loop and collect the rest of the data
+				$chop = explode(': ', $dat);
+				$this->metaStream[$chop[0]] = $chop[1];
+			}
 		}
 		
-		function stream($path, $method='GET', $payload)	{
-			$context = stream_context_create(array('http' => array('method' => $method, 'content'=>$payload)));
-			return json_decode(file_get_contents($this->conn.$path, 0, $context));
+		
+	}
+	
+	class elasticSearchDSL	{
+		public $DSL = array();
+		
+		function __construct($data, $type='json')	{
+			return $this->import($data, $type);
+		}
+		
+		function add($type, $key, $value)	{
+			$this->DSL[$type][$key] = $value;
+			return $this;
+		}
+		
+		function import($data, $type='json')	{
+			$this->DSL = json_decode($data, true);
+		}
+		
+		function export($type='json')	{
+			return $this->DSL;
 		}
 	}
 	
-	class esIndex	{
-		function __construct($conn, $index, $type="")	{
-			$this->conn = $conn;
-			$this->setIndex($index); //set $this->index
-			$this->setType($type);
-			$this->opts = array();
-		}
+	class elasticSearchResults	{
+		public $hits = array();
+		public $shards = array();
+		public $stats = array();
+		public $data = array();
+		public $total = array();
 		
-		function getIndexType()	{
-			return $this->index.'/'.$this->type.'/';
-		}
-		
-		function getType()	{
-			return $this->type;
-		}
-		
-		function getIndex($asArray=false)	{
-			if($asArray == true)	{
-				return explode(',', $this->index);
-			} else {
-				return $this->index;
-			}
-		}
-		
-		function setIndex($index)	{ //set the index
-			if(is_array($index) == true)	{
-				$this->index = implode(',', array_keys($index));
-			} else {
-				$this->index = $index;
-			}
-			return $this;
-		}
-		
-		function setType($type)	{
-			$this->type = $type;
-			return $this;
-		}
-		
-		function document($id, $data=array())	{
-			return new esIndexDoc($this, $id, $data);
-		}
-		
-		function setOpt($key, $value)	{
-			$this->opts[$key] = $value;
-		}
-		
-		function setOptions($opts)	{
-			foreach($opts as $dex => $dat)	{
-				$this->setOpt($dex, $dat);
-			}
-			return $this;
-		}
-		
-		function getOptions($opts=array())	{
-			if($opt == array())	{
-				return $this->opts;
-			}
-			else	{
-				return array_intersec_key(array_flip($opts), $this->opts);
-			}
-		}
-		
-		function stream($input, $method, $payload=null)	{
-			return $this->conn->stream($this->getIndexType().$input.$this->conn->makePath($this->opts), $method, $payload);
-		}
-		
-		function mGet($docs, $fields=null)	{
-			foreach($docs as $dex=>$dat)	{
-				if(isset($dat['_index']) == false)	{
-					$docs[$dex]['_index'] = $this->getIndex();
-				}
-				if(isset($dat['_type']) == false)	{
-					$docs[$dex]['_type'] = $this->getType();
-				}
-				if($fields != null && isset($dat['_fields']) == false)	{
-					$docs[$dex]['fields'] = $fields;
-				}
-			}
-			return $this->conn->stream('_mget', 'POST', $docs);
+		function __construct($result)	{
+			$this->data = $result['hits']['hits'];
+			unset($result['hits']['hits']);
+			$this->hits = $result['hits'];
+			$this->shards = $result['_shards'];
+			$this->stats = array('took' => $result['took'], 'timed_out' => $result['timed_out']);
+			$this->total =& $this->hits['total'];
 		}
 	}
 	
-	class esIndexDoc {
-		public $data = "";
+	/*(class elasticSearch_mapReduce	{
+		public $workingSet = array();
 		
-		function __construct($index, $id, $data=array())	{
-			$this->index = $index;
-			$this->id = $id;
-			$this->opts =& $this->index->opts;
-			$this->setData($data);
+		function __construct($url='http://127.0.0.1', $port=9200, $index=null, $type=null)	{
+			$es = new elasticSearch($url, $port, $index, $type);
 		}
 		
-		function indexDoc()	{ //index the document
-			return $this->index->stream($this->id, 'POST', $this->encodeData($this->data));
+		function query($dsl, $rules, $output='query')	{
+			$this->workingSet[$output] = new elasticSearchResults($this->es->search($dsl))->data;
+		}
+		function map($func, $args, $input='query', $output='map')	{
+			$this->workingSet[$output] = array_map($func, $this->workingSet[$input], $args); 
 		}
 		
-		function delDoc()	{
-			return $this->decodeData($this->index->stream($this->id, 'DELETE', null));
+		function reduce($func, $input='map', $output='reduce') {
+			$this->reduce[$output] = array_reduce($this->workingSet[$input], $func);
 		}
-		
-		function getDoc($type=null)	{
-			if($type != null)	{ //back up current type
-				$typeBK = $this->index->getType();
-				$this->index->setType($type);
-			}
-			$result  = $this->index->stream($this->id, 'GET', null);
-			if($type != null)	{ //replace type
-				$this->setType($typeBK);
-			}
-			//var_dump($result);
-			$this->data = $this->decodeData($result);
-			return $this;
-		}
-		
-		function updateDoc($update=null, $retry=0)	{
-			if ($update != null)	{
-				$this->setData($update);
-			}
-			if($retry > 0)	{
-				$this->index->setOpt('retry_on_confict', $retry);
-			}
-			return $this->index->stream($this->id.'/_update', 'POST', $this->encodeData($this->data));
-		}
-		
-		function setOptions($opts)	{
-			return $this->index->setOpt($opts);
-		}
-		
-		function getOptions($opts=array())	{
-			return $this->index->getOptions();
-		}
-		
-		function setData($data)	{
-			$this->data = $data;
-			return $this;
-		}
-		
-		function encodeData($data=null)	{
-			$data = ($data == null) ? $this->data : $data;
-			return json_encode($data);
-		}
-		
-		function decodeData($data=null)	{
-			$data = ($data == null) ? $this->data : $data;
-			return json_decode($data, true);
-		}
-		
-		function setVersion($version)	{
-			$this->index->setOpt('version', $version);
-			return $this;
-		}
-		
-		function setRoute($route)	{
-			$this->index->setOpt('route', $route);
-			return $this;
-		}
-		 
-		function setParent($parent)	{
-			$this->index->setOpt('parent', $parent);
-			return $this;
-		}
-		
-		function setTimestamp($timestamp)	{
-			$this->index->setOpt('timestamp', $timestamp);
-			return $this;
-		}
-		
-		function setTTL($ttl)	{
-			$this->index->setOpt('ttl', $ttl);
-			return $this;
-		}
-		
-		function setTimeout($timeout)	{
-			$this->index->setOpt('timeout', $timeout);
-			return $this;
-		}
-		
-		function setRealtime($realtime) 	{
-			$this->index->setOpt('realtime', $realtime);
-			return $this;
-		}
-		
-		function setFields(array $fields) 	{
-			$this->index->setOpt('fields', implode(',', $fields));
-			return $this;
-		}
-	}
-	
-	class queryDSL	{
-		
-		function import($array)	{ //just import the array we want to use until we have time to make a full system
-			$this->queryArray = $array;
-		}
-		
-		function export()	{
-			$this->$queryArray;
-		}
-	}
-	
-	class esIndcies 	{
-		/*
-		 * This class is for administationing the indexes them selves and not really running querys agaenst
-		*/
-	}
-	
-	class esCluster	{
-		/*
-		 * This class is for administationing the cluster them selves and not really running querys agaenst
-		*/
-	}
-	
-	
-	
-
-?>
+	}*/
